@@ -53,22 +53,38 @@ O projeto ainda usa um único módulo Maven na raiz desta pasta. A separação f
 
 ## O que já existe
 
-- Entidades `Product`, `Warehouse` e `User`, seus repositórios e migrações Flyway `V1` a `V4`.
-- Serviço interno de cadastro de produtos com normalização do SKU e recusa prévia de duplicidade. Um índice único no PostgreSQL protege a unicidade sem diferenciar maiúsculas de minúsculas.
+- Entidades `Product`, `Warehouse` e `User`, seus repositórios e migrações Flyway `V1` a `V5`.
+- Serviço interno de cadastro e consulta por ID de produtos, com normalização do SKU e recusa prévia de duplicidade. Um índice único no PostgreSQL protege a unicidade sem diferenciar maiúsculas de minúsculas.
+- Serviço interno de cadastro e consulta de depósitos com normalização do código. Um índice único no PostgreSQL impede códigos equivalentes com diferenças de maiúsculas e minúsculas.
 - Serviço interno de cadastro de usuários com normalização do e-mail e codificação da senha por BCrypt.
-- DTO inicial de entrada de produto e testes unitários de cadastro de produto e usuário.
+- DTOs iniciais de entrada e resposta para produtos e depósitos, com testes unitários de cadastro e consulta; cadastro interno de usuários com testes unitários.
 
-Esses serviços ainda não estão expostos por controllers. A validação anotada no DTO de produto só será acionada na fronteira HTTP quando houver um controller com `@Valid`.
+Esses serviços ainda não estão expostos por controllers. A validação anotada nos DTOs de produto e depósito só será acionada na fronteira HTTP quando houver controllers com `@Valid`.
 
-## Execução e testes
+## Configuração do banco
 
-São necessários JDK 25 e Maven para compilar o backend. A aplicação ainda não possui configuração de conexão com PostgreSQL nem um Compose pronto; portanto, **não há um procedimento completo de execução da aplicação** nesta fase.
+São necessários JDK 25, Maven e PostgreSQL. A conexão aponta para `localhost:5432` e exige estas variáveis de ambiente no processo que inicia a aplicação:
 
-Os testes unitários de produto e usuário foram executados localmente: **6 passaram**. A execução exigiu apontar o Maven para um JDK 25 funcional e iniciar o Mockito como agente Java neste ambiente Windows. A suíte completa, as migrações em PostgreSQL e os fluxos HTTP ainda não foram validados.
+| Variável | Conteúdo |
+|---|---|
+| `DB_NAME` | Nome do banco já criado |
+| `DB_USER` | Usuário com acesso ao banco |
+| `DB_PASSWORD` | Senha desse usuário |
+
+No IntelliJ, configure-as em **Run/Debug Configurations → Environment variables**. O `application.yaml` contém apenas referências às variáveis, sem credenciais. Arquivos `.env` locais são ignorados pelo Git; criar um arquivo `.env` sozinho **não** faz o Spring Boot carregá-lo automaticamente.
+
+Ao iniciar a aplicação com a conexão disponível, o Flyway deve aplicar as migrações `V1` a `V5`, e o Hibernate deve validar o esquema (`ddl-auto: validate`). **Ainda não foi confirmada uma inicialização bem-sucedida com PostgreSQL neste projeto.** Não há Compose pronto nem fluxo completo de uso da aplicação.
+
+## Testes e estado da verificação
+
+Os testes unitários de produto, depósito e usuário foram executados localmente: **13 passaram**. A execução exigiu apontar o Maven para um JDK 25 funcional e iniciar o Mockito como agente Java neste ambiente Windows.
+
+A suíte completa foi executada, mas o teste `contextLoads` falhou ao tentar abrir a conexão PostgreSQL neste ambiente (`Permission denied: getsockopt`). Portanto, o resultado total foi **13 testes aprovados e 1 erro**. Esse erro não valida nem invalida as migrações: elas ainda precisam ser verificadas numa execução com acesso ao banco. Os fluxos HTTP também não foram testados, pois ainda não existem controllers.
 
 ## Próximos passos
 
-1. Fechar os contratos iniciais da API para produtos, depósitos e usuários.
-2. Implementar autenticação e autorização antes de disponibilizar operações protegidas.
-3. Criar as operações de estoque e verificar transações e concorrência com PostgreSQL.
-4. Integrar o frontend e preparar Docker Compose, documentação da API e demonstração.
+1. Confirmar a conexão com PostgreSQL e a aplicação das migrações `V1` a `V5`.
+2. Fechar os contratos iniciais da API para produtos, depósitos e usuários.
+3. Implementar autenticação e autorização antes de disponibilizar operações protegidas.
+4. Criar as operações de estoque e verificar transações e concorrência com PostgreSQL.
+5. Integrar o frontend e preparar Docker Compose, documentação da API e demonstração.

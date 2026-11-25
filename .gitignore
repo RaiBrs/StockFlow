@@ -5,6 +5,11 @@ target/
 !**/src/test/**/target/
 docs
 
+# Arquivos locais de variáveis de ambiente; exemplos sem segredos podem ser versionados.
+.env
+.env.*
+!.env.example
+
 ### STS ###
 .apt_generated
 .classpath
