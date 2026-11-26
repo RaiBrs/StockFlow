@@ -9,6 +9,9 @@ docs
 .env
 .env.*
 !.env.example
+application-local.yaml
+application-local.yml
+application-local.properties
 
 ### STS ###
 .apt_generated
@@ -21,6 +24,7 @@ docs
 
 ### IntelliJ IDEA ###
 .idea
+.run/
 *.iws
 *.iml
 *.ipr

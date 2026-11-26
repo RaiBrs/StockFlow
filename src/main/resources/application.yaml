@@ -10,3 +10,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+stockflow:
+  setup-admin:
+    enabled: ${STOCKFLOW_SETUP_ADMIN_ENABLED:false}
