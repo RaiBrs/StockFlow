@@ -25,7 +25,8 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler({DuplicateSkuException.class, DuplicateWarehouseCodeException.class,
-            DuplicateEmailException.class, StockOperationConflictException.class})
+            DuplicateEmailException.class, StockOperationConflictException.class,
+            ProductLifecycleConflictException.class, WarehouseLifecycleConflictException.class})
     public ProblemDetail duplicate(RuntimeException exception) {
         return problem(HttpStatus.CONFLICT, "Conflito", exception.getMessage());
     }

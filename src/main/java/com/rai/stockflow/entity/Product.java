@@ -56,4 +56,12 @@ public class Product {
     public boolean isActive() {
         return active;
     }
+
+    public void deactivate() {
+        active = false;
+    }
+
+    public void reactivate() {
+        active = true;
+    }
 }

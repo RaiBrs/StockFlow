@@ -53,17 +53,18 @@ class StockServiceTest {
         warehouse = mock(Warehouse.class);
         actor = mock(User.class);
         when(product.getId()).thenReturn(1L);
+        when(product.isActive()).thenReturn(true);
         when(warehouse.getId()).thenReturn(2L);
         when(warehouse.isActive()).thenReturn(true);
         when(actor.isActive()).thenReturn(true);
         when(users.findByEmail("admin@example.com")).thenReturn(Optional.of(actor));
+        when(products.findForUpdate(1L)).thenReturn(Optional.of(product));
+        when(warehouses.findForUpdate(2L)).thenReturn(Optional.of(warehouse));
         when(movements.save(any(StockMovement.class))).thenAnswer(call -> call.getArgument(0));
     }
 
     @Test
     void initialEntryCreatesBalanceAndMovement() {
-        when(products.findById(1L)).thenReturn(Optional.of(product));
-        when(warehouses.findById(2L)).thenReturn(Optional.of(warehouse));
         when(balances.saveAndFlush(any(StockBalance.class))).thenAnswer(call -> call.getArgument(0));
 
         var result = service.initialize(new StockChangeRequest(1L, 2L, 5L), "admin@example.com");
@@ -77,12 +78,54 @@ class StockServiceTest {
 
     @Test
     void secondInitialEntryIsRejected() {
-        when(products.findById(1L)).thenReturn(Optional.of(product));
-        when(warehouses.findById(2L)).thenReturn(Optional.of(warehouse));
         when(balances.existsByProductIdAndWarehouseId(1L, 2L)).thenReturn(true);
 
         assertThrows(StockOperationConflictException.class,
                 () -> service.initialize(new StockChangeRequest(1L, 2L, 5L), "admin@example.com"));
+        verify(movements, never()).save(any());
+    }
+
+    @Test
+    void inactiveProductCannotReceiveInitialOrCommonEntry() {
+        when(product.isActive()).thenReturn(false);
+
+        assertThrows(StockOperationConflictException.class,
+                () -> service.initialize(new StockChangeRequest(1L, 2L, 5L), "admin@example.com"));
+        assertThrows(StockOperationConflictException.class,
+                () -> service.enter(new StockChangeRequest(1L, 2L, 5L), "admin@example.com"));
+        verify(movements, never()).save(any());
+    }
+
+    @Test
+    void inactiveProductCannotReceivePositiveAdjustment() {
+        when(product.isActive()).thenReturn(false);
+        when(balances.findForUpdate(1L, 2L)).thenReturn(Optional.of(new StockBalance(product, warehouse, 0)));
+
+        assertThrows(StockOperationConflictException.class, () -> service.adjust(
+                new StockAdjustmentRequest(1L, 2L, 1L, StockAdjustmentDirection.IN, "Contagem"),
+                "admin@example.com"));
+        verify(movements, never()).save(any());
+    }
+
+    @Test
+    void inactiveWarehouseCannotReceiveCommonEntry() {
+        when(warehouse.isActive()).thenReturn(false);
+
+        assertThrows(StockOperationConflictException.class,
+                () -> service.enter(new StockChangeRequest(1L, 2L, 1L), "admin@example.com"));
+        verify(movements, never()).save(any());
+    }
+
+    @Test
+    void inactiveWarehouseCannotReceiveInitialEntryOrPositiveAdjustment() {
+        when(warehouse.isActive()).thenReturn(false);
+        when(balances.findForUpdate(1L, 2L)).thenReturn(Optional.of(new StockBalance(product, warehouse, 0)));
+
+        assertThrows(StockOperationConflictException.class,
+                () -> service.initialize(new StockChangeRequest(1L, 2L, 1L), "admin@example.com"));
+        assertThrows(StockOperationConflictException.class, () -> service.adjust(
+                new StockAdjustmentRequest(1L, 2L, 1L, StockAdjustmentDirection.IN, "Contagem"),
+                "admin@example.com"));
         verify(movements, never()).save(any());
     }
 

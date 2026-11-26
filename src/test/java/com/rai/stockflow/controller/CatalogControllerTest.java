@@ -2,6 +2,7 @@ package com.rai.stockflow.controller;
 
 import com.rai.stockflow.dto.ProductResponse;
 import com.rai.stockflow.dto.WarehouseResponse;
+import com.rai.stockflow.dto.WarehousePageResponse;
 import com.rai.stockflow.entity.Product;
 import com.rai.stockflow.entity.Warehouse;
 import com.rai.stockflow.exception.ApiExceptionHandler;
@@ -27,6 +28,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -211,5 +215,106 @@ class CatalogControllerTest {
         mvc.perform(get("/api/v1/warehouses/99"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail").value("Depósito não encontrado: 99"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void managerDeactivatesAndReactivatesProduct() throws Exception {
+        when(productService.deactivate(1L))
+                .thenReturn(new ProductResponse(1L, "SKU-1", "Monitor", "Displays", false));
+        when(productService.reactivate(1L))
+                .thenReturn(new ProductResponse(1L, "SKU-1", "Monitor", "Displays", true));
+
+        mvc.perform(patch("/api/v1/products/1/deactivate").with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+        mvc.perform(patch("/api/v1/products/1/reactivate").with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERATOR")
+    void operatorCannotChangeProductStatus() throws Exception {
+        mvc.perform(patch("/api/v1/products/1/deactivate").with(csrf()))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void onlyAdminDeletesUnusedProduct() throws Exception {
+        mvc.perform(delete("/api/v1/products/1").with(csrf()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void managerCannotDeleteProduct() throws Exception {
+        mvc.perform(delete("/api/v1/products/1").with(csrf()))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERATOR")
+    void operatorListsWarehouses() throws Exception {
+        when(warehouseService.list(0)).thenReturn(new WarehousePageResponse(
+                java.util.List.of(new WarehouseResponse(2L, "DEP-01", "Central", true)), 0, 1, 1));
+
+        mvc.perform(get("/api/v1/warehouses"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].code").value("DEP-01"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void managerUpdatesWarehouse() throws Exception {
+        when(warehouseService.update(org.mockito.ArgumentMatchers.eq(2L), any()))
+                .thenReturn(new WarehouseResponse(2L, "DEP-02", "Anexo", true));
+
+        mvc.perform(put("/api/v1/warehouses/2").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"DEP-02","name":"Anexo"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("DEP-02"));
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void managerDeactivatesAndReactivatesWarehouse() throws Exception {
+        when(warehouseService.deactivate(2L))
+                .thenReturn(new WarehouseResponse(2L, "DEP-01", "Central", false));
+        when(warehouseService.reactivate(2L))
+                .thenReturn(new WarehouseResponse(2L, "DEP-01", "Central", true));
+
+        mvc.perform(patch("/api/v1/warehouses/2/deactivate").with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+        mvc.perform(patch("/api/v1/warehouses/2/reactivate").with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERATOR")
+    void operatorCannotChangeWarehouse() throws Exception {
+        mvc.perform(patch("/api/v1/warehouses/2/deactivate").with(csrf()))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(warehouseService);
+    }
+
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void invalidWarehouseUpdateReturnsBadRequest() throws Exception {
+        mvc.perform(put("/api/v1/warehouses/2").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":" ","name":"Anexo"}
+                                """))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(warehouseService);
     }
 }

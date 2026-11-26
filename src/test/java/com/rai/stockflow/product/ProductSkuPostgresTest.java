@@ -1,6 +1,8 @@
 package com.rai.stockflow.product;
 
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -13,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** Confere o índice real: a consulta prévia do serviço não protege gravações simultâneas. */
+@EnabledIfEnvironmentVariable(named = "STOCKFLOW_RUN_DB_TESTS", matches = "true")
 class ProductSkuPostgresTest {
 
     @Test
@@ -26,6 +29,8 @@ class ProductSkuPostgresTest {
 
         String url = System.getenv().getOrDefault("STOCKFLOW_TEST_DB_URL",
                 "jdbc:postgresql://localhost:5432/" + database);
+        // O teste deve funcionar mesmo quando executa antes dos testes que sobem o contexto Spring.
+        Flyway.configure().dataSource(url, user, password).load().migrate();
         String sku = "TEST-" + UUID.randomUUID();
         try (Connection connection = DriverManager.getConnection(url, user, password)) {
             connection.setAutoCommit(false);

@@ -6,6 +6,7 @@ import com.rai.stockflow.entity.Warehouse;
 import com.rai.stockflow.exception.DuplicateWarehouseCodeException;
 import com.rai.stockflow.exception.WarehouseNotFoundException;
 import com.rai.stockflow.repository.WarehouseRepository;
+import com.rai.stockflow.repository.StockBalanceRepository;
 import com.rai.stockflow.service.WarehouseService;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
@@ -32,7 +33,7 @@ class WarehouseServiceTest {
     @BeforeEach
     void setUp() {
         repository = mock(WarehouseRepository.class);
-        service = new WarehouseService(repository);
+        service = new WarehouseService(repository, mock(StockBalanceRepository.class));
     }
 
     @Test

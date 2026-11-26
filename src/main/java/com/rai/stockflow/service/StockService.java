@@ -52,8 +52,9 @@ public class StockService {
 
     @Transactional
     public StockMovementResponse initialize(StockChangeRequest request, String actorEmail) {
-        Product product = product(request.productId());
-        Warehouse warehouse = warehouse(request.warehouseId());
+        Product product = lockedProduct(request.productId());
+        requireActiveProduct(product);
+        Warehouse warehouse = lockedWarehouse(request.warehouseId());
         requireActiveWarehouse(warehouse);
         User actor = actor(actorEmail);
 
@@ -70,8 +71,10 @@ public class StockService {
 
     @Transactional
     public StockMovementResponse enter(StockChangeRequest request, String actorEmail) {
+        requireActiveProduct(lockedProduct(request.productId()));
+        Warehouse warehouse = lockedWarehouse(request.warehouseId());
+        requireActiveWarehouse(warehouse);
         StockBalance balance = lockedBalance(request.productId(), request.warehouseId());
-        requireActiveWarehouse(balance.getWarehouse());
         long previous = balance.getQuantity();
         long updated = add(previous, request.quantity());
         balance.changeQuantity(updated);
@@ -81,6 +84,8 @@ public class StockService {
 
     @Transactional
     public StockMovementResponse exit(StockChangeRequest request, String actorEmail) {
+        lockedProduct(request.productId());
+        lockedWarehouse(request.warehouseId());
         StockBalance balance = lockedBalance(request.productId(), request.warehouseId());
         long previous = balance.getQuantity();
         long updated = subtract(previous, request.quantity());
@@ -91,11 +96,14 @@ public class StockService {
 
     @Transactional
     public StockMovementResponse adjust(StockAdjustmentRequest request, String actorEmail) {
+        Product product = lockedProduct(request.productId());
+        Warehouse warehouse = lockedWarehouse(request.warehouseId());
         StockBalance balance = lockedBalance(request.productId(), request.warehouseId());
         long previous = balance.getQuantity();
         boolean increase = request.direction() == StockAdjustmentDirection.IN;
         if (increase) {
-            requireActiveWarehouse(balance.getWarehouse());
+            requireActiveProduct(product);
+            requireActiveWarehouse(warehouse);
         }
         long updated = increase ? add(previous, request.quantity()) : subtract(previous, request.quantity());
         balance.changeQuantity(updated);
@@ -128,12 +136,12 @@ public class StockService {
                 .orElseThrow(() -> new StockBalanceNotFoundException(productId, warehouseId));
     }
 
-    private Product product(Long id) {
-        return productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException(id));
+    private Product lockedProduct(Long id) {
+        return productRepository.findForUpdate(id).orElseThrow(() -> new ProductNotFoundException(id));
     }
 
-    private Warehouse warehouse(Long id) {
-        return warehouseRepository.findById(id).orElseThrow(() -> new WarehouseNotFoundException(id));
+    private Warehouse lockedWarehouse(Long id) {
+        return warehouseRepository.findForUpdate(id).orElseThrow(() -> new WarehouseNotFoundException(id));
     }
 
     private User actor(String email) {
@@ -145,6 +153,12 @@ public class StockService {
     private void requireActiveWarehouse(Warehouse warehouse) {
         if (!warehouse.isActive()) {
             throw new StockOperationConflictException("Depósito inativo não pode receber mercadorias.");
+        }
+    }
+
+    private void requireActiveProduct(Product product) {
+        if (!product.isActive()) {
+            throw new StockOperationConflictException("Produto inativo não pode receber mercadorias.");
         }
     }
 

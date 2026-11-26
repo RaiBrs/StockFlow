@@ -125,10 +125,11 @@ class StockControllerTest {
 
     @Test
     @WithMockUser(roles = "OPERATOR")
-    void operatorCannotReadMovementHistory() throws Exception {
+    void operatorCanReadMovementHistory() throws Exception {
+        when(service.movements(2L, 3L, 0)).thenReturn(new StockMovementPageResponse(List.of(), 0, 0, 0));
+
         mvc.perform(get("/api/v1/stock/movements/2/3"))
-                .andExpect(status().isForbidden());
-        verifyNoInteractions(service);
+                .andExpect(status().isOk());
     }
 
     @Test

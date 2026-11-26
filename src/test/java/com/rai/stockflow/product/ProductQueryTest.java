@@ -4,6 +4,8 @@ import com.rai.stockflow.dto.ProductResponse;
 import com.rai.stockflow.entity.Product;
 import com.rai.stockflow.exception.ProductNotFoundException;
 import com.rai.stockflow.repository.ProductRepository;
+import com.rai.stockflow.repository.StockBalanceRepository;
+import com.rai.stockflow.repository.StockMovementRepository;
 import com.rai.stockflow.service.ProductService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +28,8 @@ class ProductQueryTest {
     @BeforeEach
     void setUp() {
         productRepository = mock(ProductRepository.class);
-        service = new ProductService(productRepository);
+        service = new ProductService(productRepository, mock(StockBalanceRepository.class),
+                mock(StockMovementRepository.class));
     }
 
     @Test

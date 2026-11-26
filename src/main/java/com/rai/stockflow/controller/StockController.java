@@ -69,7 +69,7 @@ public class StockController {
     }
 
     @GetMapping("/movements/{productId}/{warehouseId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     public StockMovementPageResponse movements(@PathVariable Long productId,
                                                @PathVariable Long warehouseId,
                                                @RequestParam(defaultValue = "0") int page) {

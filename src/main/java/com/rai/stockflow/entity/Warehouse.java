@@ -48,4 +48,17 @@ public class Warehouse {
     public boolean isActive() {
         return active;
     }
+
+    public void updateDetails(String code, String name) {
+        this.code = code;
+        this.name = name;
+    }
+
+    public void deactivate() {
+        active = false;
+    }
+
+    public void reactivate() {
+        active = true;
+    }
 }

@@ -13,6 +13,12 @@ public interface StockBalanceRepository extends JpaRepository<StockBalance, Long
 
     boolean existsByProductIdAndWarehouseId(Long productId, Long warehouseId);
 
+    boolean existsByProductIdAndQuantityGreaterThan(Long productId, long quantity);
+
+    boolean existsByProductId(Long productId);
+
+    boolean existsByWarehouseIdAndQuantityGreaterThan(Long warehouseId, long quantity);
+
     Optional<StockBalance> findByProductIdAndWarehouseId(Long productId, Long warehouseId);
 
     // Bloqueia a linha até o fim da transação para serializar alterações do mesmo saldo.

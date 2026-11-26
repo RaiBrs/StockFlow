@@ -21,7 +21,8 @@ Pedidos, reservas, transferências, alertas de estoque mínimo, abastecimento, a
 - Movimentações concluídas são imutáveis; correções usam novas movimentações compensatórias.
 - A entrada inicial estabelece o primeiro saldo e é restrita a `ADMIN` e `MANAGER`. Entradas e saídas comuns podem ser feitas também por `OPERATOR`.
 - Ajustes manuais exigem justificativa e são restritos a `ADMIN` e `MANAGER`.
-- Produtos só poderão ser desativados com saldo zero em todos os depósitos. Produtos com histórico não poderão ser excluídos definitivamente.
+- Produtos só podem ser desativados com saldo zero em todos os depósitos. A desativação preserva saldos e histórico; produto inativo não recebe entrada inicial, entrada comum nem ajuste positivo. Após reativação, pode voltar a receber mercadorias. A exclusão definitiva, exclusiva de `ADMIN`, exige ausência de vínculos com depósitos e de histórico.
+- Depósitos com mercadorias não podem ser desativados. Um depósito inativo não recebe entrada inicial, entrada comum ou ajuste positivo; após reativação, pode voltar a recebê-los. O bloqueio de desativação por operações pendentes será incorporado quando pedidos ou transferências forem modelados, pois hoje não existe estado pendente no backend.
 
 ## Tecnologias
 
@@ -57,7 +58,7 @@ O projeto ainda usa um único módulo Maven na raiz desta pasta. A separação f
 
 - Entidades `Product`, `Warehouse`, `User`, `StockBalance` e `StockMovement`, seus repositórios e migrações Flyway `V1` a `V6`.
 - Serviço interno de cadastro e consulta por ID de produtos, com normalização do SKU e recusa prévia de duplicidade. Um índice único no PostgreSQL protege a unicidade sem diferenciar maiúsculas de minúsculas.
-- Serviço interno de cadastro e consulta de depósitos com normalização do código. Um índice único no PostgreSQL impede códigos equivalentes com diferenças de maiúsculas e minúsculas.
+- Cadastro, consulta, listagem, atualização, desativação e reativação de depósitos. O código é normalizado; um índice único no PostgreSQL impede códigos equivalentes com diferenças de maiúsculas e minúsculas.
 - Serviço interno de cadastro de usuários com normalização do e-mail e codificação da senha por BCrypt.
 - Configuração explícita para criar o primeiro `ADMIN` quando a tabela de usuários estiver vazia; fica desligada por padrão.
 - Login que confere a senha com BCrypt e emite JWT de 15 minutos. A cada acesso protegido, o backend consulta o estado e o perfil atuais do usuário; token de conta desativada ou com perfil alterado é recusado.
@@ -65,6 +66,10 @@ O projeto ainda usa um único módulo Maven na raiz desta pasta. A separação f
 - Saldo físico por produto e depósito; cada mudança gera um movimento com responsável, tipo, quantidade, data e saldos anterior e novo. A operação inteira usa uma transação, e alterações de saldos existentes usam bloqueio pessimista no PostgreSQL.
 
 As rotas usam o prefixo `/api/v1`: `POST /auth/login`, `POST /products`, `GET /products/{id}`, `POST /warehouses`, `GET /warehouses/{id}`, `POST /users` e `GET /users/{id}`. O cadastro de produtos e depósitos exige `ADMIN` ou `MANAGER`; a consulta aceita também `OPERATOR`. Cadastro e consulta de usuários exigem `ADMIN`. As rotas de cadastro retornam 201, a consulta retorna 200 e erros conhecidos são traduzidos para 400, 404 ou 409. Ausência ou invalidade de autenticação resulta em 401; perfil sem permissão resulta em 403. `@Valid` ativa a validação dos DTOs na entrada HTTP. Listagem, atualização e desativação de usuários ainda estão pendentes.
+
+Depósitos também oferecem `GET /warehouses?page=0` para listagem em páginas de 20, `PUT /warehouses/{id}` para atualizar `code` e `name`, e `PATCH /warehouses/{id}/deactivate` e `/reactivate`. A listagem aceita os três perfis; atualização e mudança de estado exigem `ADMIN` ou `MANAGER`. Um depósito com saldo positivo retorna 409 ao tentar desativar. As operações de estoque e a mudança de estado bloqueiam a mesma linha de depósito para impedir entradas simultâneas à desativação.
+
+O ciclo de vida do produto usa `PATCH /products/{id}/deactivate` e `PATCH /products/{id}/reactivate`, disponíveis a `ADMIN` e `MANAGER`, com `ProductResponse` e status 200. `DELETE /products/{id}` exige `ADMIN` e retorna 204 quando o produto nunca teve vínculo de estoque nem histórico. Produto com saldo positivo não pode ser desativado; produto com qualquer vínculo de estoque ou movimentação não pode ser excluído definitivamente. Conflitos retornam 409. As operações de estoque e a mudança de estado bloqueiam a mesma linha de produto para impedir uma entrada simultânea à desativação.
 
 ### Operações de estoque
 
@@ -77,7 +82,7 @@ Todas as rotas abaixo exigem JWT e usam o prefixo `/api/v1/stock`:
 | `POST /exits` | ADMIN, MANAGER, OPERATOR | Retira unidades até o saldo disponível |
 | `POST /adjustments` | ADMIN, MANAGER | Corrige saldo com direção e justificativa |
 | `GET /balances/{productId}/{warehouseId}` | Todos | Consulta saldo físico atual |
-| `GET /movements/{productId}/{warehouseId}?page=0` | ADMIN, MANAGER | Consulta histórico em páginas de 20, do mais recente para o mais antigo |
+| `GET /movements/{productId}/{warehouseId}?page=0` | Todos | Consulta histórico em páginas de 20, do mais recente para o mais antigo |
 
 As três primeiras operações recebem `productId`, `warehouseId` e `quantity` positiva. Ajustes também recebem `direction` (`IN` ou `OUT`) e `reason` obrigatória. Cada POST retorna 201 e o movimento criado, incluindo `previousBalance` e `newBalance`. Saldo ainda não iniciado retorna 404; saldo insuficiente, depósito inativo ou segunda entrada inicial retornam 409. A entrada inicial simultânea é protegida por uma restrição única no banco. Movimentos já concluídos não possuem rota de edição ou exclusão.
 
@@ -132,7 +137,7 @@ Uma resposta válida contém `accessToken`, `tokenType: "Bearer"` e `expiresIn: 
 
 ## Testes e estado da verificação
 
-Os testes de serviço e HTTP cobrem validação, autorização e operações de estoque. A suíte completa foi executada com um PostgreSQL isolado: migração V6, unicidade de SKU, concorrência entre duas saídas e rollback quando um movimento viola uma restrição SQL foram verificados. `docker compose config --quiet` também validou a configuração.
+Os testes de serviço e HTTP cobrem validação, autorização, ciclo de vida de produtos e depósitos, e operações de estoque. A suíte completa foi executada com um PostgreSQL isolado: migração V6, unicidade de SKU, concorrência entre saídas, corridas entre entrada e desativação de produto ou depósito, e rollback quando um movimento viola uma restrição SQL foram verificados. `docker compose config --quiet` também validou a configuração.
 
 `ProductSkuPostgresTest` usa PostgreSQL real e só executa a verificação quando `DB_NAME`, `DB_USER` e `DB_PASSWORD` estão disponíveis no processo de testes. Por padrão, conecta em `localhost:5432`; para o banco do Compose, defina `STOCKFLOW_TEST_DB_URL=jdbc:postgresql://localhost:5433/<DB_NAME>`. O teste faz rollback e não deixa produto cadastrado. Uma execução em que ele seja ignorado não comprova a restrição no banco.
 
@@ -142,6 +147,6 @@ Os testes de serviço e HTTP cobrem validação, autorização e operações de 
 
 1. Verificar manualmente o login do `ADMIN` criado no PostgreSQL e o acesso com JWT às rotas protegidas.
 2. Completar gestão de usuários restrita a `ADMIN`.
-3. Completar contratos de atualização e desativação de produtos e depósitos conforme as regras de estoque.
+3. Completar listagem e atualização de produtos; adicionar a verificação de operações pendentes no depósito quando esse tipo de operação existir.
 4. Integrar login e operações de estoque em um teste HTTP ponta a ponta com PostgreSQL.
 5. Integrar o frontend e validar Docker Compose, documentação da API e demonstração.
