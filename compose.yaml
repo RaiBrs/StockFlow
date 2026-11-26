@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${DB_NAME:?Defina DB_NAME}
+      POSTGRES_USER: ${DB_USER:?Defina DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - stockflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_NAME: ${DB_NAME:?Defina DB_NAME}
+      DB_USER: ${DB_USER:?Defina DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD}
+      JWT_SECRET_BASE64: ${JWT_SECRET_BASE64:?Defina JWT_SECRET_BASE64}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:?Defina DB_NAME}
+      STOCKFLOW_SETUP_ADMIN_ENABLED: ${STOCKFLOW_SETUP_ADMIN_ENABLED:-false}
+      STOCKFLOW_SETUP_ADMIN_EMAIL: ${STOCKFLOW_SETUP_ADMIN_EMAIL:-}
+      STOCKFLOW_SETUP_ADMIN_PASSWORD: ${STOCKFLOW_SETUP_ADMIN_PASSWORD:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  stockflow_pgdata:

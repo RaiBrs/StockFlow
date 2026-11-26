@@ -2,6 +2,7 @@ package com.rai.stockflow.service;
 
 import com.rai.stockflow.entity.User;
 import com.rai.stockflow.exception.DuplicateEmailException;
+import com.rai.stockflow.exception.UserNotFoundException;
 import com.rai.stockflow.repository.UserRepository;
 import com.rai.stockflow.security.Role;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,5 +56,12 @@ class UserRegistrationServiceTest {
 
         verify(passwordEncoder, never()).encode(any());
         verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void missingUserThrowsSpecificException() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(UserNotFoundException.class, () -> service.findById(99L));
     }
 }

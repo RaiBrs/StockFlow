@@ -2,7 +2,9 @@
 
 StockFlow é uma aplicação web de gestão de estoque para pequenas e médias empresas, especialmente distribuidoras. O projeto busca manter saldos confiáveis por produto e depósito, impedir saídas acima do disponível e registrar quem realizou cada movimentação. Também serve como projeto de aprendizado e portfólio em Java e Spring Boot.
 
-> **Estado atual:** o backend está em construção. Existem login JWT e rotas iniciais protegidas de produtos e depósitos. Gestão de usuários, operações de estoque, frontend e Docker Compose ainda estão pendentes.
+> **Estado atual:** o backend está em construção. Existem login JWT, rotas iniciais de produtos, depósitos e usuários, além de saldo por produto e depósito, entradas, saídas, ajustes e histórico. Frontend e demais operações de cadastro ainda estão pendentes.
+
+O escopo verificável está em [REQUIREMENTS.md](docs/REQUIREMENTS.md) e a sequência de entregas em [BACKLOG.md](docs/BACKLOG.md).
 
 ## Escopo planejado
 
@@ -53,15 +55,31 @@ O projeto ainda usa um único módulo Maven na raiz desta pasta. A separação f
 
 ## O que já existe
 
-- Entidades `Product`, `Warehouse` e `User`, seus repositórios e migrações Flyway `V1` a `V5`.
+- Entidades `Product`, `Warehouse`, `User`, `StockBalance` e `StockMovement`, seus repositórios e migrações Flyway `V1` a `V6`.
 - Serviço interno de cadastro e consulta por ID de produtos, com normalização do SKU e recusa prévia de duplicidade. Um índice único no PostgreSQL protege a unicidade sem diferenciar maiúsculas de minúsculas.
 - Serviço interno de cadastro e consulta de depósitos com normalização do código. Um índice único no PostgreSQL impede códigos equivalentes com diferenças de maiúsculas e minúsculas.
 - Serviço interno de cadastro de usuários com normalização do e-mail e codificação da senha por BCrypt.
 - Configuração explícita para criar o primeiro `ADMIN` quando a tabela de usuários estiver vazia; fica desligada por padrão.
 - Login que confere a senha com BCrypt e emite JWT de 15 minutos. A cada acesso protegido, o backend consulta o estado e o perfil atuais do usuário; token de conta desativada ou com perfil alterado é recusado.
-- DTOs de entrada e resposta para produtos e depósitos, controllers com validação e autorização por perfil, além de testes de serviço e de contrato HTTP; cadastro interno de usuários com testes unitários.
+- DTOs de entrada e resposta para produtos, depósitos e usuários, controllers com validação e autorização por perfil, além de testes de serviço e de contrato HTTP.
+- Saldo físico por produto e depósito; cada mudança gera um movimento com responsável, tipo, quantidade, data e saldos anterior e novo. A operação inteira usa uma transação, e alterações de saldos existentes usam bloqueio pessimista no PostgreSQL.
 
-As rotas usam o prefixo `/api/v1`: `POST /auth/login`, `POST /products`, `GET /products/{id}`, `POST /warehouses` e `GET /warehouses/{id}`. O cadastro de produtos e depósitos exige `ADMIN` ou `MANAGER`; a consulta aceita também `OPERATOR`. As rotas de cadastro retornam 201, a consulta retorna 200 e erros conhecidos são traduzidos para 400, 404 ou 409. Ausência ou invalidade de autenticação resulta em 401; perfil sem permissão resulta em 403. `@Valid` ativa a validação dos DTOs na entrada HTTP. Gestão de usuários ainda não está implementada.
+As rotas usam o prefixo `/api/v1`: `POST /auth/login`, `POST /products`, `GET /products/{id}`, `POST /warehouses`, `GET /warehouses/{id}`, `POST /users` e `GET /users/{id}`. O cadastro de produtos e depósitos exige `ADMIN` ou `MANAGER`; a consulta aceita também `OPERATOR`. Cadastro e consulta de usuários exigem `ADMIN`. As rotas de cadastro retornam 201, a consulta retorna 200 e erros conhecidos são traduzidos para 400, 404 ou 409. Ausência ou invalidade de autenticação resulta em 401; perfil sem permissão resulta em 403. `@Valid` ativa a validação dos DTOs na entrada HTTP. Listagem, atualização e desativação de usuários ainda estão pendentes.
+
+### Operações de estoque
+
+Todas as rotas abaixo exigem JWT e usam o prefixo `/api/v1/stock`:
+
+| Método e rota | Perfis | Efeito |
+|---|---|---|
+| `POST /initial-entries` | ADMIN, MANAGER | Cria o primeiro saldo do par produto e depósito |
+| `POST /entries` | ADMIN, MANAGER, OPERATOR | Acrescenta unidades a saldo já iniciado |
+| `POST /exits` | ADMIN, MANAGER, OPERATOR | Retira unidades até o saldo disponível |
+| `POST /adjustments` | ADMIN, MANAGER | Corrige saldo com direção e justificativa |
+| `GET /balances/{productId}/{warehouseId}` | Todos | Consulta saldo físico atual |
+| `GET /movements/{productId}/{warehouseId}?page=0` | ADMIN, MANAGER | Consulta histórico em páginas de 20, do mais recente para o mais antigo |
+
+As três primeiras operações recebem `productId`, `warehouseId` e `quantity` positiva. Ajustes também recebem `direction` (`IN` ou `OUT`) e `reason` obrigatória. Cada POST retorna 201 e o movimento criado, incluindo `previousBalance` e `newBalance`. Saldo ainda não iniciado retorna 404; saldo insuficiente, depósito inativo ou segunda entrada inicial retornam 409. A entrada inicial simultânea é protegida por uma restrição única no banco. Movimentos já concluídos não possuem rota de edição ou exclusão.
 
 ## Configuração local
 
@@ -76,7 +94,19 @@ São necessários JDK 25, Maven e PostgreSQL. A conexão aponta para `localhost:
 
 No IntelliJ, configure-as em **Run/Debug Configurations → Environment variables**. Para gerar uma chave local no PowerShell, execute `[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))` e coloque o resultado em `JWT_SECRET_BASE64`. Guarde a chave fora do repositório: trocá-la invalida os tokens já emitidos. O `application.yaml` não contém credenciais. O `.gitignore` exclui `.env`, configurações locais `application-local.*` e configurações compartilháveis do IntelliJ em `.run/`; confira o `git status` antes de cada commit. Criar um arquivo `.env` sozinho **não** faz o Spring Boot carregá-lo automaticamente.
 
-Ao iniciar a aplicação com a conexão disponível, o Flyway valida as migrações `V1` a `V5`, e o Hibernate valida o esquema (`ddl-auto: validate`). Os logs da execução local mostraram a aplicação iniciando com PostgreSQL e o esquema na versão 5. Ainda não há Compose pronto.
+Ao iniciar a aplicação com a conexão disponível, o Flyway aplica as migrações `V1` a `V6`, e o Hibernate valida o esquema (`ddl-auto: validate`). A versão 6 foi aplicada em um PostgreSQL de teste isolado.
+
+### Executar com Docker Compose
+
+O Compose inicia um **banco separado** do PostgreSQL local. Ele publica o banco em `localhost:5433`, para não ocupar a porta `5432` já usada no computador, e a API em `localhost:8080`. Defina `DB_NAME`, `DB_USER`, `DB_PASSWORD` e `JWT_SECRET_BASE64` no terminal que executará o Compose. As variáveis salvas apenas na configuração do IntelliJ não chegam automaticamente ao terminal. O arquivo `.env` local também pode fornecer essas variáveis ao Compose e está ignorado pelo Git.
+
+```powershell
+mvn -DskipTests package
+docker compose up --build -d
+docker compose ps
+```
+
+O `Dockerfile` usa o JAR gerado por Maven. Na primeira inicialização, o Flyway cria o esquema no volume `stockflow_pgdata`. Para usar o primeiro administrador nesse banco novo, configure as variáveis de setup para uma única execução; retire a senha e desative o modo depois. `docker compose down` para os contêineres e preserva o volume. Não use `down -v` se quiser manter os dados.
 
 ### Criar o primeiro administrador
 
@@ -102,14 +132,16 @@ Uma resposta válida contém `accessToken`, `tokenType: "Bearer"` e `expiresIn: 
 
 ## Testes e estado da verificação
 
-Os testes selecionados de serviço, configuração inicial, contratos HTTP e segurança foram executados localmente: **40 passaram**. Eles incluem login, token expirado, perfil sem permissão e bloqueio de conta desativada. A execução exigiu apontar o Maven para um JDK 25 funcional e iniciar o Mockito como agente Java neste ambiente Windows.
+Os testes de serviço e HTTP cobrem validação, autorização e operações de estoque. A suíte completa foi executada com um PostgreSQL isolado: migração V6, unicidade de SKU, concorrência entre duas saídas e rollback quando um movimento viola uma restrição SQL foram verificados. `docker compose config --quiet` também validou a configuração.
 
-A suíte completa foi executada anteriormente, mas o teste `contextLoads` falhou ao tentar abrir a conexão PostgreSQL no ambiente de testes (`Permission denied: getsockopt`). Depois disso, logs de uma execução local no IntelliJ confirmaram a conexão e a validação das cinco migrações. Os testes HTTP atuais usam MockMvc e repositório simulado; ainda não comprovam o fluxo de login completo com PostgreSQL real.
+`ProductSkuPostgresTest` usa PostgreSQL real e só executa a verificação quando `DB_NAME`, `DB_USER` e `DB_PASSWORD` estão disponíveis no processo de testes. Por padrão, conecta em `localhost:5432`; para o banco do Compose, defina `STOCKFLOW_TEST_DB_URL=jdbc:postgresql://localhost:5433/<DB_NAME>`. O teste faz rollback e não deixa produto cadastrado. Uma execução em que ele seja ignorado não comprova a restrição no banco.
+
+`StockConcurrencyPostgresTest` é executado quando `STOCKFLOW_RUN_DB_TESTS=true` e as variáveis de banco apontam para um PostgreSQL de teste. Use `SPRING_DATASOURCE_URL` para indicar a porta do banco quando não for `5432`. Os testes HTTP de estoque usam MockMvc e serviço simulado; o fluxo completo de login com o ADMIN do seu banco local ainda precisa de verificação manual.
 
 ## Próximos passos
 
 1. Verificar manualmente o login do `ADMIN` criado no PostgreSQL e o acesso com JWT às rotas protegidas.
-2. Implementar gestão de usuários restrita a `ADMIN`.
+2. Completar gestão de usuários restrita a `ADMIN`.
 3. Completar contratos de atualização e desativação de produtos e depósitos conforme as regras de estoque.
-4. Criar as operações de estoque e verificar transações e concorrência com PostgreSQL.
-5. Integrar o frontend e preparar Docker Compose, documentação da API e demonstração.
+4. Integrar login e operações de estoque em um teste HTTP ponta a ponta com PostgreSQL.
+5. Integrar o frontend e validar Docker Compose, documentação da API e demonstração.

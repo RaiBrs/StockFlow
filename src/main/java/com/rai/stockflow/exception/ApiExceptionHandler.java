@@ -18,13 +18,14 @@ public class ApiExceptionHandler {
         return problem(HttpStatus.UNAUTHORIZED, "Não autenticado", "Credenciais inválidas.");
     }
 
-    @ExceptionHandler({ProductNotFoundException.class, WarehouseNotFoundException.class})
+    @ExceptionHandler({ProductNotFoundException.class, WarehouseNotFoundException.class,
+            UserNotFoundException.class, StockBalanceNotFoundException.class})
     public ProblemDetail notFound(RuntimeException exception) {
         return problem(HttpStatus.NOT_FOUND, "Recurso não encontrado", exception.getMessage());
     }
 
     @ExceptionHandler({DuplicateSkuException.class, DuplicateWarehouseCodeException.class,
-            DuplicateEmailException.class})
+            DuplicateEmailException.class, StockOperationConflictException.class})
     public ProblemDetail duplicate(RuntimeException exception) {
         return problem(HttpStatus.CONFLICT, "Conflito", exception.getMessage());
     }
@@ -49,6 +50,11 @@ public class ApiExceptionHandler {
     public ProblemDetail invalidBody() {
         return problem(HttpStatus.BAD_REQUEST, "Corpo inválido",
                 "O corpo da requisição está ausente ou inválido.");
+    }
+
+    @ExceptionHandler(InvalidPageException.class)
+    public ProblemDetail invalidPage(InvalidPageException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "Dados inválidos", exception.getMessage());
     }
 
     private ProblemDetail problem(HttpStatus status, String title, String detail) {

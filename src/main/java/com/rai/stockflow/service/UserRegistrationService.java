@@ -2,6 +2,7 @@ package com.rai.stockflow.service;
 
 import com.rai.stockflow.entity.User;
 import com.rai.stockflow.exception.DuplicateEmailException;
+import com.rai.stockflow.exception.UserNotFoundException;
 import com.rai.stockflow.repository.UserRepository;
 import com.rai.stockflow.security.Role;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -32,5 +33,9 @@ public class UserRegistrationService {
         String passwordHash = passwordEncoder.encode(rawPassword);
         User user = new User(normalizedEmail, passwordHash, role);
         return userRepository.save(user);
+    }
+
+    public User findById(Long id) {
+        return userRepository.findById(id).orElseThrow(() -> new UserNotFoundException(id));
     }
 }
